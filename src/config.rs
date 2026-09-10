@@ -101,6 +101,7 @@ pub struct ConfigValues {
     pub library_tabs: Option<Vec<LibraryTab>>,
     pub hide_display_names: Option<bool>,
     pub ap_port: Option<u16>,
+    pub client_id: Option<String>,
 }
 
 /// The ncspot theme.
@@ -364,5 +365,22 @@ pub fn set_configuration_base_path(base_path: Option<PathBuf>) {
             fs::create_dir_all(&basepath).expect("could not create basepath directory");
         }
         *BASE_PATH.write().unwrap() = Some(basepath);
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn client_id_parses_from_toml() {
+        let values: ConfigValues = toml::from_str(r#"client_id = "abc123""#).expect("valid toml");
+        assert_eq!(values.client_id.as_deref(), Some("abc123"));
+    }
+
+    #[test]
+    fn missing_client_id_is_none() {
+        let values: ConfigValues = toml::from_str("shuffle = true").expect("valid toml");
+        assert_eq!(values.client_id, None);
     }
 }

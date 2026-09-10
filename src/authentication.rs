@@ -1,5 +1,4 @@
 use std::fs;
-use std::net::TcpListener;
 use std::path::Path;
 
 use librespot_core::authentication::Credentials as RespotCredentials;
@@ -10,35 +9,22 @@ use log::{error, info, warn};
 use crate::config::{self, Config};
 use crate::spotify::Spotify;
 
+/// Client ID for the login flow and the librespot session: Spotify's own "keymaster" app.
+/// A personal app ID does not work here. librespot sends playback requests through Spotify's
+/// login5 endpoint. login5 rejects custom client IDs with `BAD_REQUEST` (librespot PR #1344).
+/// Login is rare and not rate-limited, so the shared ID is acceptable.
 pub const SPOTIFY_CLIENT_ID: &str = "65b708073fc0480ea92a077233ca87bd";
+
+/// Default client ID for the Web API flow (search, playlists, track metadata): the shared
+/// ncspot app. Set the `client_id` configuration option to use a personal app instead. Spotify
+/// limits the request rate per client ID. Shared IDs get HTTP 429 errors (issue
+/// hrkfdn/ncspot#1867).
 pub const NCSPOT_CLIENT_ID: &str = "d420a117a32841c2b3474932e49fb54b";
 
-static OAUTH_SCOPES: &[&str] = &[
-    "playlist-modify",
-    "playlist-modify-private",
-    "playlist-modify-public",
-    "playlist-read",
-    "playlist-read-collaborative",
-    "playlist-read-private",
-    "streaming",
-    "user-follow-modify",
-    "user-follow-read",
-    "user-library-modify",
-    "user-library-read",
-    "user-modify",
-    "user-modify-playback-state",
-    "user-modify-private",
-    "user-personalized",
-    "user-read-currently-playing",
-    "user-read-email",
-    "user-read-play-history",
-    "user-read-playback-position",
-    "user-read-playback-state",
-    "user-read-private",
-    "user-read-recently-played",
-    "user-top-read",
-];
-
+/// OAuth scopes for the librespot login flow and the Web API flow. Spotify rejects the full
+/// authorization request with `invalid_scope` if it does not recognize a requested scope.
+/// Every entry must be in the documented list:
+/// https://developer.spotify.com/documentation/web-api/concepts/scopes
 static NCSPOT_OAUTH_SCOPES: &[&str] = &[
     "streaming",
     "user-read-email",
@@ -57,18 +43,17 @@ static NCSPOT_OAUTH_SCOPES: &[&str] = &[
     "user-read-recently-played",
 ];
 
-pub fn find_free_port() -> Result<u16, String> {
-    let socket = TcpListener::bind("127.0.0.1:0").map_err(|e| e.to_string())?;
-    socket
-        .local_addr()
-        .map(|addr| addr.port())
-        .map_err(|e| e.to_string())
+/// The client ID for the Web API flow: the `client_id` configuration option if set, otherwise
+/// the shared ncspot app ID.
+pub fn web_api_client_id(values: &config::ConfigValues) -> &str {
+    values.client_id.as_deref().unwrap_or(NCSPOT_CLIENT_ID)
 }
 
+/// Redirect URI for both OAuth flows. It is the URI registered for the personal Web API app.
+/// Spotify ignores the port of loopback redirect URIs (RFC 8252), so the fixed port also
+/// works for the login flow with the shared keymaster ID.
 pub fn get_client_redirect_uri() -> String {
-    let auth_port = find_free_port().expect("Could not find free port");
-    let redirect_url = format!("http://127.0.0.1:{auth_port}/login");
-    redirect_url
+    String::from("http://127.0.0.1:8989/login")
 }
 
 /// Get credentials for use with librespot. This first tries to get cached credentials. If no cached
@@ -111,7 +96,7 @@ pub fn create_credentials() -> Result<RespotCredentials, String> {
     let client_builder = OAuthClientBuilder::new(
         SPOTIFY_CLIENT_ID,
         &get_client_redirect_uri(),
-        OAUTH_SCOPES.to_vec(),
+        NCSPOT_OAUTH_SCOPES.to_vec(),
     );
     let oauth_client = client_builder.build().map_err(|e| e.to_string())?;
 
@@ -121,7 +106,7 @@ pub fn create_credentials() -> Result<RespotCredentials, String> {
         .map_err(|e| e.to_string())
 }
 
-pub fn get_rspotify_token() -> Result<rspotify::Token, String> {
+pub fn get_rspotify_token(configuration: &Config) -> Result<rspotify::Token, String> {
     let path = config::cache_path("rspotify_token.json");
     let token = if let Ok(token_json) = fs::read_to_string(&path) {
         serde_json::from_str::<rspotify::Token>(&token_json).ok()
@@ -141,7 +126,7 @@ pub fn get_rspotify_token() -> Result<rspotify::Token, String> {
         if let Some(refresh_token) = refresh_token {
             info!("Access token expired, attempting to refresh..");
             let client_builder = OAuthClientBuilder::new(
-                NCSPOT_CLIENT_ID,
+                web_api_client_id(&configuration.values()),
                 &get_client_redirect_uri(),
                 NCSPOT_OAUTH_SCOPES.to_vec(),
             );
@@ -160,18 +145,18 @@ pub fn get_rspotify_token() -> Result<rspotify::Token, String> {
         }
     }
 
-    let t = create_rspotify_token()?;
+    let t = create_rspotify_token(configuration)?;
     write_token(&path, &t);
     Ok(t)
 }
 
-pub fn create_rspotify_token() -> Result<rspotify::Token, String> {
+pub fn create_rspotify_token(configuration: &Config) -> Result<rspotify::Token, String> {
     println!(
         "To fully enable Web API features, you need to perform a second OAuth2 authorization\n"
     );
 
     let client_builder = OAuthClientBuilder::new(
-        NCSPOT_CLIENT_ID,
+        web_api_client_id(&configuration.values()),
         &get_client_redirect_uri(),
         NCSPOT_OAUTH_SCOPES.to_vec(),
     );
@@ -272,5 +257,70 @@ mod test {
     fn map_token_yields_no_refresh_token_when_omitted_without_fallback() {
         let mapped = map_token(oauth_token(""), None);
         assert_eq!(mapped.refresh_token, None);
+    }
+
+    #[test]
+    fn redirect_uri_matches_registered_app() {
+        assert_eq!(get_client_redirect_uri(), "http://127.0.0.1:8989/login");
+    }
+
+    #[test]
+    fn client_ids_match_intended_apps() {
+        assert_eq!(SPOTIFY_CLIENT_ID, "65b708073fc0480ea92a077233ca87bd");
+        assert_eq!(NCSPOT_CLIENT_ID, "d420a117a32841c2b3474932e49fb54b");
+    }
+
+    #[test]
+    fn web_api_client_id_defaults_to_shared_ncspot_app() {
+        let values = crate::config::ConfigValues::default();
+        assert_eq!(web_api_client_id(&values), NCSPOT_CLIENT_ID);
+    }
+
+    #[test]
+    fn web_api_client_id_uses_configured_value() {
+        let values = crate::config::ConfigValues {
+            client_id: Some(String::from("test-client-id")),
+            ..Default::default()
+        };
+        assert_eq!(web_api_client_id(&values), "test-client-id");
+    }
+
+    #[test]
+    fn oauth_scopes_are_documented_spotify_scopes() {
+        let documented_scopes = [
+            "app-remote-control",
+            "playlist-modify-private",
+            "playlist-modify-public",
+            "playlist-read-collaborative",
+            "playlist-read-private",
+            "streaming",
+            "ugc-image-upload",
+            "user-follow-modify",
+            "user-follow-read",
+            "user-library-modify",
+            "user-library-read",
+            "user-modify-playback-state",
+            "user-personalized",
+            "user-read-currently-playing",
+            "user-read-email",
+            "user-read-playback-position",
+            "user-read-playback-state",
+            "user-read-private",
+            "user-read-recently-played",
+            "user-top-read",
+        ];
+
+        for scope in NCSPOT_OAUTH_SCOPES {
+            assert!(
+                documented_scopes.contains(scope),
+                "scope {scope} is not a documented Spotify scope. Spotify rejects the full \
+                 authorization request with `invalid_scope` if it does not recognize a scope"
+            );
+        }
+
+        assert!(
+            NCSPOT_OAUTH_SCOPES.contains(&"streaming"),
+            "the librespot session requires the `streaming` scope"
+        );
     }
 }
