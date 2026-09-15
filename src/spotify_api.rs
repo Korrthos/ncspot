@@ -213,9 +213,9 @@ impl WebApi {
         // create mutable copy for chunking
         let mut tracks: Vec<Playable> = tracks.to_vec();
 
-        // we can only send 100 tracks per request
-        let mut remainder = if tracks.len() > 100 {
-            Some(tracks.split_off(100))
+        // we can only send 10 tracks per request
+        let mut remainder = if tracks.len() > 10 {
+            Some(tracks.split_off(10))
         } else {
             None
         };
@@ -234,9 +234,9 @@ impl WebApi {
         if replace_items.is_some() {
             debug!("saved {} tracks to playlist {}", tracks.len(), id);
             while let Some(ref mut tracks) = remainder.clone() {
-                // grab the next set of 100 tracks
-                remainder = if tracks.len() > 100 {
-                    Some(tracks.split_off(100))
+                // grab the next set of 10 tracks
+                remainder = if tracks.len() > 10 {
+                    Some(tracks.split_off(10))
                 } else {
                     None
                 };
@@ -351,7 +351,7 @@ impl WebApi {
                 seed_genres.clone(),
                 seed_trackids,
                 Some(Market::FromToken),
-                Some(100),
+                Some(10),
             )
         })
         .ok_or(())
@@ -401,7 +401,7 @@ impl WebApi {
 
     /// Get the tracks in the playlist given by `playlist_id`.
     pub fn user_playlist_tracks(&self, playlist_id: &str) -> ApiResult<Playable> {
-        const MAX_LIMIT: u32 = 100;
+        const MAX_LIMIT: u32 = 10;
         let spotify = self.clone();
         let playlist_id = playlist_id.to_string();
         let fetch_page = move |offset: u32| {
