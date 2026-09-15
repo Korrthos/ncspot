@@ -381,7 +381,7 @@ impl WebApi {
 
     /// Fetch all the current user's playlists.
     pub fn current_user_playlist(&self) -> ApiResult<Playlist> {
-        const MAX_LIMIT: u32 = 50;
+        const MAX_LIMIT: u32 = 10;
         let spotify = self.clone();
         let fetch_page = move |offset: u32| {
             debug!("fetching user playlists, offset: {offset}");
@@ -476,7 +476,7 @@ impl WebApi {
         artist_id: &str,
         album_type: Option<AlbumType>,
     ) -> ApiResult<Album> {
-        const MAX_SIZE: u32 = 50;
+        const MAX_SIZE: u32 = 10;
         let spotify = self.clone();
         let artist_id = artist_id.to_string();
         let fetch_page = move |offset: u32| {
@@ -509,7 +509,7 @@ impl WebApi {
 
     /// Get all the episodes of the show with the given `show_id`.
     pub fn show_episodes(&self, show_id: &str) -> ApiResult<Episode> {
-        const MAX_SIZE: u32 = 50;
+        const MAX_SIZE: u32 = 10;
         let spotify = self.clone();
         let show_id = show_id.to_string();
         let fetch_page = move |offset: u32| {
@@ -518,7 +518,7 @@ impl WebApi {
                 match api.get_shows_episodes_manual(
                     ShowId::from_id(&show_id).unwrap(),
                     Some(Market::FromToken),
-                    Some(50),
+                    Some(10),
                     Some(offset),
                 ) {
                     Ok(page) => Ok(ApiPage {
@@ -536,7 +536,7 @@ impl WebApi {
 
     /// Get the user's saved shows.
     pub fn get_saved_shows(&self, offset: u32) -> Result<Page<Show>, ()> {
-        self.api_with_retry(|api| api.get_saved_show_manual(Some(50), Some(offset)))
+        self.api_with_retry(|api| api.get_saved_show_manual(Some(10), Some(offset)))
             .ok_or(())
     }
 
@@ -570,7 +570,7 @@ impl WebApi {
         &self,
         last: Option<&str>,
     ) -> Result<CursorBasedPage<FullArtist>, ()> {
-        self.api_with_retry(|api| api.current_user_followed_artists(last, Some(50)))
+        self.api_with_retry(|api| api.current_user_followed_artists(last, Some(10)))
             .ok_or(())
     }
 
@@ -601,7 +601,7 @@ impl WebApi {
     /// Get the user's saved albums, starting at the given `offset`. The result is paginated.
     pub fn current_user_saved_albums(&self, offset: u32) -> Result<Page<SavedAlbum>, ()> {
         self.api_with_retry(|api| {
-            api.current_user_saved_albums_manual(Some(Market::FromToken), Some(50), Some(offset))
+            api.current_user_saved_albums_manual(Some(Market::FromToken), Some(10), Some(offset))
         })
         .ok_or(())
     }
@@ -633,7 +633,7 @@ impl WebApi {
     /// Get the user's saved tracks, starting at the given `offset`. The result is paginated.
     pub fn current_user_saved_tracks(&self, offset: u32) -> Result<Page<SavedTrack>, ()> {
         self.api_with_retry(|api| {
-            api.current_user_saved_tracks_manual(Some(Market::FromToken), Some(50), Some(offset))
+            api.current_user_saved_tracks_manual(Some(Market::FromToken), Some(10), Some(offset))
         })
         .ok_or(())
     }
@@ -690,7 +690,7 @@ impl WebApi {
 
     /// Get the available categories.
     pub fn categories(&self) -> ApiResult<Category> {
-        const MAX_LIMIT: u32 = 50;
+        const MAX_LIMIT: u32 = 10;
         let spotify = self.clone();
         let fetch_page = move |offset: u32| {
             debug!("fetching categories, offset: {offset}");
@@ -716,7 +716,7 @@ impl WebApi {
 
     /// Get the playlists in the category given by `category_id`.
     pub fn category_playlists(&self, category_id: &str) -> ApiResult<Playlist> {
-        const MAX_LIMIT: u32 = 50;
+        const MAX_LIMIT: u32 = 10;
         let spotify = self.clone();
         let category_id = category_id.to_string();
         let fetch_page = move |offset: u32| {

@@ -55,7 +55,7 @@ impl Album {
                                 .api
                                 .album_tracks(
                                     album_id,
-                                    50,
+                                    10,
                                     tracks.offset + tracks.items.len() as u32,
                                 )
                                 .ok()
